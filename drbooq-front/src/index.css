@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================
+   Theme Variables
+   ============================ */
+:root {
+  --brand-500: #0f6ad2;   /* main brand blue */
+  --accent-500: #16a34a; /* accent green */
+}
+
+/* ============================
+   Base Styles
+   ============================ */
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+}
+
+/* ============================
+   Floating Label Inputs
+   ============================ */
+.input-container {
+  position: relative;
+}
+
+.input-label {
+  position: absolute;
+  left: 14px;
+  top: 10px;
+  transform-origin: left top;
+  transition: all 0.18s ease;
+  pointer-events: none;
+  color: #6b7280; /* Tailwind gray-500 */
+  font-size: 0.95rem;
+}
+
+.input-field:focus + .input-label,
+.input-field:not(:placeholder-shown) + .input-label {
+  transform: translateY(-18px) scale(0.85);
+  color: var(--brand-500);
+}
+
+/* ============================
+   Animations
+   ============================ */
+
+/* ⚡ Instant popup — no delay */
+@keyframes instantShow {
+  from {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-instantShow {
+  animation: instantShow 0.05s ease-in; /* nearly instant */
+}
+
+/* Optional slide-down for menus, kept normal */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideDown {
+  animation: slideDown 0.25s ease-out;
+}
+
+/* Floating subtle up/down animation for visuals */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* ============================
+   Buttons
+   ============================ */
+.btn-primary {
+  @apply w-full py-3 rounded-lg font-medium text-white transition;
+  background: linear-gradient(to right, var(--brand-500), var(--accent-500));
+}
+
+.btn-primary:hover {
+  opacity: 0.9;
+}
+
+/* ============================
+   Marquee Animation
+   ============================ */
+@keyframes marqueeScroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: marqueeScroll 92s linear infinite; /* smooth + slow */
+}
+
+/* ============================
+   Scrollbar Hide (for mobile horizontal scroll)
+   ============================ */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(50px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.25s ease-out;
+}
