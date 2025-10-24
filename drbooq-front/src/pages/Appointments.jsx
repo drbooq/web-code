@@ -32,19 +32,71 @@ export default function StaffAppointments() {
   const [searchQuery, setSearchQuery] = useState("");
   const [staff, setStaff] = useState(null);
 
-  useEffect(() => {
-    const savedStaff = localStorage.getItem("staff");
-    if (savedStaff) {
-      setStaff(JSON.parse(savedStaff));
-    }
+  // useEffect(() => {
+  //   const savedStaff = localStorage.getItem("staff");
+  //   if (savedStaff) {
+  //     setStaff(JSON.parse(savedStaff));
+  //   }
 
-    const saved = JSON.parse(localStorage.getItem("appointments") || "[]");
-    setAppointments(saved);
-  }, []);
+  //   const saved = JSON.parse(localStorage.getItem("appointments") || "[]");
+  //   setAppointments(saved);
+  // }, []);
+// This part checks if staff or patient
+// (commented out in your code)
+useEffect(() => {
+  const currentUser = localStorage.getItem("currentUser");
+  const staff = localStorage.getItem("staff");
 
-  useEffect(() => {
-    localStorage.setItem("appointments", JSON.stringify(appointments));
-  }, [appointments]);
+  if (!currentUser && !staff) {
+    alert("🔒 Please login to access appointments");
+    navigate("/login");
+    return;
+  }
+
+  const user = currentUser ? JSON.parse(currentUser) : null;
+  if (user && user.role === "patient") {
+    alert("⚠️ This page is only for staff members");
+    navigate("/");
+    return;
+  }
+}, [navigate]);
+
+// 🔔 Reminder: Notify doctor 5 minutes before any online consultation
+useEffect(() => {
+  const checkReminders = () => {
+    const now = new Date();
+
+    appointments.forEach((appt) => {
+      if (appt.type !== "online" || appt.status !== "confirmed") return;
+
+      const [hours, minutes] = appt.time.split(":").map(Number);
+      const apptTime = new Date(`${appt.date}T${appt.time}:00`);
+      const diffMinutes = (apptTime - now) / 1000 / 60;
+
+      // Trigger alert when it's between 4.5 and 5.5 minutes away
+      if (diffMinutes > 4.5 && diffMinutes < 5.5) {
+        // Avoid duplicate alerts for same appointment
+        if (!localStorage.getItem(`notified_${appt.id}`)) {
+          alert(`🔔 Reminder: Online consultation with ${appt.patient} starts in 5 minutes!`);
+          localStorage.setItem(`notified_${appt.id}`, "true");
+        }
+      }
+
+      // Clean old reminders (past appointments)
+      if (diffMinutes < -10) {
+        localStorage.removeItem(`notified_${appt.id}`);
+      }
+    });
+  };
+
+  // Run every 60 seconds
+  const interval = setInterval(checkReminders, 60000);
+  return () => clearInterval(interval);
+}, [appointments]);
+
+  // useEffect(() => {
+  //   localStorage.setItem("appointments", JSON.stringify(appointments));
+  // }, [appointments]);
 
   const today = new Date().toISOString().split("T")[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split("T")[0];
@@ -53,12 +105,35 @@ export default function StaffAppointments() {
   const lastWeekStart = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
 
   const todayAppointments = appointments.filter((a) => a.date === today);
-  const todayStats = {
-    total: todayAppointments.length,
-    confirmed: todayAppointments.filter((a) => a.status === "confirmed").length,
-    pending: todayAppointments.filter((a) => a.status === "pending").length,
-    rejected: todayAppointments.filter((a) => a.status === "rejected").length,
+  // const todayStats = {
+  //   total: todayAppointments.length,
+  //   confirmed: todayAppointments.filter((a) => a.status === "confirmed").length,
+  //   pending: todayAppointments.filter((a) => a.status === "pending").length,
+  //   rejected: todayAppointments.filter((a) => a.status === "rejected").length,
+  // };
+const [todayStats, setTodayStats] = useState({
+  total: 0,
+  confirmed: 0,
+  pending: 0,
+  rejected: 0,
+});
+const calculateTodayStats = (list) => {
+  const todayStr = new Date().toISOString().split("T")[0];
+  const normalizeDate = (d) => {
+    if (!d) return "";
+    return d.includes("T") ? d.split("T")[0] : d;
   };
+  const todayOnly = list.filter((a) => normalizeDate(a.date) === todayStr);
+  return {
+    total: todayOnly.length,
+    confirmed: todayOnly.filter((a) => a.status === "confirmed").length,
+    pending: todayOnly.filter((a) => a.status === "pending").length,
+    rejected: todayOnly.filter((a) => a.status === "rejected").length,
+  };
+};
+
+
+
 
   const overallStats = {
     pending: appointments.filter((a) => a.status === "pending").length,
@@ -67,6 +142,20 @@ export default function StaffAppointments() {
   };
 
   const getFilteredAppointments = () => {
+
+     const to24HourTime = (timeStr) => {
+    if (!timeStr) return "";
+    const [time, modifier] = timeStr.split(" ");
+    let [hours, minutes] = time.split(":");
+    if (modifier?.toUpperCase() === "PM" && hours !== "12") {
+      hours = String(Number(hours) + 12);
+    }
+    if (modifier?.toUpperCase() === "AM" && hours === "12") {
+      hours = "00";
+    }
+    return `${hours.padStart(2, "0")}:${minutes}`;
+  };
+
     let filtered = appointments;
 
     if (activeTab === "pending") {
@@ -85,27 +174,53 @@ export default function StaffAppointments() {
       } else if (timeFilter === "lastWeek") {
         filtered = filtered.filter((a) => a.date >= lastWeekStart && a.date < today);
       }
-    } else if (activeTab === "upcoming") {
-      filtered = filtered.filter((a) => a.date >= today && a.status === "confirmed");
+    } // ✅ UPCOMING TAB — shows future or just-started appointments
+else if (activeTab === "upcoming") {
+  const now = new Date();
 
-      if (timeFilter === "today") {
-        filtered = filtered.filter((a) => a.date === today);
-      } else if (timeFilter === "tomorrow") {
-        filtered = filtered.filter((a) => a.date === tomorrow);
-      } else if (timeFilter === "week") {
-        filtered = filtered.filter((a) => a.date <= nextWeek);
-      }
-    } else if (activeTab === "completed") {
-      filtered = filtered.filter((a) => a.date < today || a.status === "completed");
+  filtered = filtered.filter((a) => {
+    if (a.status !== "confirmed") return false;
 
-      if (timeFilter === "today") {
-        filtered = filtered.filter((a) => a.date === today);
-      } else if (timeFilter === "tomorrow") {
-        filtered = filtered.filter((a) => a.date === tomorrow);
-      } else if (timeFilter === "week") {
-        filtered = filtered.filter((a) => a.date <= nextWeek);
-      }
-    }
+const apptDateTime = new Date(`${a.date}T${to24HourTime(a.time)}:00`);
+    const diffMin = (apptDateTime - now) / 1000 / 60; // future - now
+
+    // Future appointments → always show
+    if (diffMin > 0) return true;
+
+    // Started but still within grace period
+    if (a.type === "online" && diffMin >= -20) return true;
+    if (a.type === "offline" && diffMin >= -45) return true;
+
+    // Too old → hide
+    return false;
+  });
+
+  if (timeFilter === "today") filtered = filtered.filter((a) => a.date === today);
+  else if (timeFilter === "tomorrow") filtered = filtered.filter((a) => a.date === tomorrow);
+  else if (timeFilter === "week") filtered = filtered.filter((a) => a.date <= nextWeek);
+}
+
+// ✅ COMPLETED TAB — shows only expired appointments
+else if (activeTab === "completed") {
+  const now = new Date();
+
+  filtered = filtered.filter((a) => {
+    if (a.status !== "confirmed") return false;
+
+    const apptDateTime = new Date(`${a.date}T${a.time}:00`);
+    const diffMin = (apptDateTime - now) / 1000 / 60;
+
+    // Show if already ended
+    if (a.type === "online" && diffMin < -20) return true;
+    if (a.type === "offline" && diffMin < -45) return true;
+
+    return false;
+  });
+}
+// 🕓 Converts "03:30 PM" → "15:30" (for Date parsing)
+
+
+
 
     if (typeFilter === "online") {
       filtered = filtered.filter((a) => a.type === "online");
@@ -126,39 +241,153 @@ export default function StaffAppointments() {
 
   const filteredAppointments = getFilteredAppointments();
 
-  const handleConfirm = (id) => {
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: "confirmed" } : a))
-    );
+const handleConfirm = async (id) => {
+  const token = localStorage.getItem("token");
+  try {
+    const res = await fetch(`http://localhost:5000/api/appointments/update/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status: "confirmed" }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setAppointments((prev) => {
+        const updated = prev.map((a) =>
+          a.id === id ? { ...a, status: "confirmed" } : a
+        );
+        setTodayStats(calculateTodayStats(updated)); // ✅ instant update
+        return updated;
+      });
+    }
+  } catch (err) {
+    console.error("Error confirming appointment:", err);
+  }
+};
+
+const handleReject = async (id) => {
+  const token = localStorage.getItem("token");
+  try {
+    const res = await fetch(`http://localhost:5000/api/appointments/update/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ status: "rejected" }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setAppointments((prev) => {
+        const updated = prev.map((a) =>
+          a.id === id ? { ...a, status: "rejected" } : a
+        );
+        setTodayStats(calculateTodayStats(updated)); // ✅ instant update
+        return updated;
+      });
+    }
+  } catch (err) {
+    console.error("Error rejecting appointment:", err);
+  }
+};
+
+
+
+  // useEffect(() => {
+  //   const currentUser = localStorage.getItem("currentUser");
+  //   const staff = localStorage.getItem("staff");
+
+  //   if (!currentUser && !staff) {
+  //     alert("🔒 Please login to access appointments");
+  //     setTimeout(() => {
+  //       navigate("/login", { replace: true });
+  //     }, 100);
+  //     return;
+  //   }
+
+  //   const user = currentUser ? JSON.parse(currentUser) : null;
+  //   if (user && user.role === "patient") {
+  //     alert("⚠️ This page is only for staff members");
+  //     setTimeout(() => {
+  //       navigate("/", { replace: true });
+  //     }, 100);
+  //     return;
+  //   }
+  // }, [navigate]);
+useEffect(() => {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    alert("Please login first");
+    navigate("/login");
+    return;
+  }
+  const fetchAppointments = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/api/appointments/staff", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+
+  if (data.success) {
+  const mapped = data.bookings.map((b) => ({
+    id: b._id,
+    patient: b.name,
+    doctor: b.doctorId?.fullName,
+    date: b.date?.split("T")[0] || "",
+    time: b.time,
+    type: b.bookingType,
+    status: b.status,
+    whatsapp: b.whatsapp,
+    notes: b.notes,
+  }));
+
+  setAppointments(mapped);
+ }
+ 
+
+    } catch (err) {
+      console.error("Error fetching appointments:", err);
+    }
   };
 
-  const handleReject = (id) => {
-    setAppointments((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status: "rejected" } : a))
-    );
-  };
+  fetchAppointments();
 
-  useEffect(() => {
-    const currentUser = localStorage.getItem("currentUser");
-    const staff = localStorage.getItem("staff");
+  // ♻️ Auto-refresh every 60 seconds
+  const interval = setInterval(fetchAppointments, 60000);
+  return () => clearInterval(interval);
+}, [navigate]);
+// ✅ Update "Today's Stats" live based on tabs
+useEffect(() => {
+  const todayStr = new Date().toISOString().split("T")[0];
 
-    if (!currentUser && !staff) {
-      alert("🔒 Please login to access appointments");
-      setTimeout(() => {
-        navigate("/login", { replace: true });
-      }, 100);
-      return;
-    }
+  // Confirmed = all upcoming confirmed
+  const confirmedAppointments = appointments.filter((a) => a.status === "confirmed");
 
-    const user = currentUser ? JSON.parse(currentUser) : null;
-    if (user && user.role === "patient") {
-      alert("⚠️ This page is only for staff members");
-      setTimeout(() => {
-        navigate("/", { replace: true });
-      }, 100);
-      return;
-    }
-  }, [navigate]);
+  // Pending = all pending
+  const pendingAppointments = appointments.filter((a) => a.status === "pending");
+
+  // Rejected = only today’s rejected
+  const rejectedToday = appointments.filter(
+    (a) => a.status === "rejected" && a.date?.split("T")[0] === todayStr
+  );
+
+  // Today’s total = confirmed happening today
+  const todayTotal = confirmedAppointments.filter(
+    (a) => a.date?.split("T")[0] === todayStr
+  ).length;
+
+  setTodayStats({
+    total: todayTotal,
+    confirmed: confirmedAppointments.length,
+    pending: pendingAppointments.length,
+    rejected: rejectedToday.length,
+  });
+}, [appointments]);
+
+
+
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: THEME.bg }}>
@@ -914,11 +1143,8 @@ function PendingAppointmentCard({ appointment, onConfirm, onReject }) {
       <div className="flex items-start justify-between mb-2 lg:mb-3">
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-sm lg:text-base mb-1 truncate" style={{ color: THEME.textPrimary }}>
-            {appointment.patient || "Patient Name"}
-          </h3>
-          <p className="text-xs lg:text-sm truncate" style={{ color: THEME.textSecondary }}>
-            Dr. {appointment.doctor || "Doctor Name"}
-          </p>
+  Dr. {appointment.doctor || "Doctor Name"}          </h3>
+           
         </div>
         <span
           className="text-xs font-bold px-2 lg:px-3 py-0.5 lg:py-1 rounded-full ml-2 flex-shrink-0"
@@ -941,6 +1167,45 @@ function PendingAppointmentCard({ appointment, onConfirm, onReject }) {
           <span className="font-medium">{appointment.time}</span>
         </div>
       </div>
+{/* Patient Details Block */}
+<div
+  className="mt-2 lg:mt-3 rounded-md border p-2 lg:p-3"
+  style={{ borderColor: THEME.border, background: THEME.lightBg }}
+>
+  <p
+    className="font-semibold text-xs lg:text-sm mb-1.5 flex items-center gap-1"
+    style={{ color: THEME.textPrimary }}
+  >
+    👤 Patient Details
+  </p>
+
+  <ul className="space-y-0.5 text-xs lg:text-sm" style={{ color: THEME.textSecondary }}>
+    <li>
+      <span className="font-medium">• Name:</span> {appointment.patient || "Unknown"}
+    </li>
+ {/* Show WhatsApp only for offline appointments */}
+{appointment.whatsapp && appointment.type === "offline" && (
+  <li>
+    <span className="font-medium">• WhatsApp:</span>{" "}
+    <a
+      href={`https://wa.me/${appointment.whatsapp.replace("+", "")}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 hover:underline"
+    >
+      {appointment.whatsapp}
+    </a>
+  </li>
+)}
+
+    {appointment.notes && (
+      <li>
+        <span className="font-medium">• Notes:</span> {appointment.notes}
+      </li>
+    )}
+  </ul>
+</div>
+
 
       {isPending && (
         <div className="flex gap-2 lg:gap-3 pt-2 lg:pt-3" style={{ borderTop: `1px solid ${THEME.border}` }}>
@@ -1031,12 +1296,14 @@ function AppointmentSection({ title, icon, appointments, type, color, typeFilter
         </div>
       ) : (
         <div className="space-y-3 overflow-y-auto" style={{ maxHeight: "520px" }}>
-          {appointments.map((appointment) => (
-            <AppointmentCard
-              key={appointment.id}
-              appointment={appointment}
-            />
-          ))}
+      {appointments.map((appointment) =>
+  type === "online" ? (
+    <OnlineAppointmentCard key={appointment.id} appointment={appointment} />
+  ) : (
+    <AppointmentCard key={appointment.id} appointment={appointment} />
+  )
+)}
+
         </div>
       )}
     </div>
@@ -1044,70 +1311,321 @@ function AppointmentSection({ title, icon, appointments, type, color, typeFilter
 }
 
 /* APPOINTMENT CARD */
+/* 🏥 OFFLINE APPOINTMENT CARD — Modern Practo Style */
 function AppointmentCard({ appointment }) {
-  const statusConfig = {
-    confirmed: { 
-      bg: "#E8F5E9", 
-      border: THEME.success, 
-      text: THEME.success,
-      label: "Confirmed"
-    },
-    completed: { 
-      bg: "#E8F5E9", 
-      border: THEME.success, 
-      text: THEME.success,
-      label: "Completed"
-    },
-  };
+  const navigate = useNavigate();
+  const [timeLeft, setTimeLeft] = useState(null);
 
-  const config = statusConfig[appointment.status] || statusConfig.confirmed;
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const apptTime = new Date(`${appointment.date}T${appointment.time}:00`);
+      const diffMs = apptTime - now;
+      const diffMin = diffMs / 1000 / 60;
+
+      if (diffMin > 0) {
+        const hours = Math.floor(diffMin / 60);
+        const minutes = Math.floor(diffMin % 60);
+        const seconds = Math.floor((diffMin * 60) % 60);
+        const formatted =
+          hours > 0
+            ? `${hours}h ${String(minutes).padStart(2, "0")}m`
+            : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+        setTimeLeft(formatted);
+      } else {
+        setTimeLeft(null);
+      }
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [appointment.date, appointment.time]);
+
+  const handleMarkCompleted = async () => {
+    const token = localStorage.getItem("token");
+    try {
+      const res = await fetch(`http://localhost:5000/api/appointments/update/${appointment.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert("✅ Appointment marked as completed!");
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error("Error marking appointment as completed:", err);
+    }
+  };
 
   return (
     <div
+      className="hover:shadow-md transition-all"
       style={{
         background: THEME.white,
         border: `1px solid ${THEME.border}`,
-        borderLeft: `4px solid ${config.border}`,
-        borderRadius: "8px",
-        padding: "12px",
+        borderLeft: `5px solid ${THEME.success}`,
+        borderRadius: "12px",
+        padding: "16px",
       }}
-      className="hover:shadow-sm transition-shadow lg:p-4"
     >
-      <div className="flex items-start justify-between mb-2 lg:mb-3">
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-sm lg:text-base mb-1 truncate" style={{ color: THEME.textPrimary }}>
-            {appointment.patient || "Patient Name"}
-          </h3>
-          <p className="text-xs lg:text-sm truncate" style={{ color: THEME.textSecondary }}>
+      {/* Header Section */}
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3 className="font-semibold text-sm lg:text-base mb-0.5" style={{ color: THEME.textPrimary }}>
             Dr. {appointment.doctor || "Doctor Name"}
+          </h3>
+          <p className="text-xs lg:text-sm" style={{ color: THEME.textSecondary }}>
+            Offline Consultation
           </p>
         </div>
-        <span
-          className="text-xs font-medium px-2 lg:px-3 py-0.5 lg:py-1 rounded-full ml-2 flex-shrink-0"
-          style={{ background: config.bg, color: config.text }}
+        <div
+          className="px-2 py-0.5 text-xs font-medium rounded-full"
+          style={{
+            background: "#E6F4EA",
+            color: THEME.success,
+          }}
         >
-          {config.label}
-        </span>
+          {timeLeft ? `🕓 In ${timeLeft}` : "Today"}
+        </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 lg:gap-3 text-xs lg:text-sm" style={{ color: THEME.textSecondary }}>
-        <div className="flex items-center gap-1.5 lg:gap-2">
-          <Calendar className="w-3.5 h-3.5 lg:w-4 lg:h-4" style={{ color: THEME.primary }} />
-          <span className="truncate">{appointment.date}</span>
-        </div>
-        <div className="flex items-center gap-1.5 lg:gap-2">
-          <Clock className="w-3.5 h-3.5 lg:w-4 lg:h-4" style={{ color: THEME.primary }} />
+      {/* Date & Time */}
+      <div className="flex items-center justify-between mb-3 text-xs lg:text-sm" style={{ color: THEME.textSecondary }}>
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4" style={{ color: THEME.primary }} />
+          <span>{appointment.date}</span>
+          <Clock className="w-4 h-4 ml-2" style={{ color: THEME.primary }} />
           <span>{appointment.time}</span>
         </div>
-        <div className="flex items-center gap-1.5 lg:gap-2">
-          {appointment.type === "online" ? (
-            <Video className="w-3.5 h-3.5 lg:w-4 lg:h-4" style={{ color: THEME.primary }} />
-          ) : (
-            <MapPin className="w-3.5 h-3.5 lg:w-4 lg:h-4" style={{ color: THEME.success }} />
-          )}
-          <span className="capitalize">{appointment.type}</span>
+        <div className="flex items-center gap-1.5">
+          <MapPin className="w-4 h-4" style={{ color: THEME.success }} />
+          <span>Clinic Visit</span>
         </div>
       </div>
+
+      {/* Patient Info */}
+      <div
+        className="rounded-md border p-2 lg:p-3 mb-3"
+        style={{ borderColor: THEME.border, background: THEME.lightBg }}
+      >
+        <p className="font-semibold text-xs lg:text-sm mb-1 flex items-center gap-1" style={{ color: THEME.textPrimary }}>
+          👤 Patient Details
+        </p>
+        <ul className="space-y-0.5 text-xs lg:text-sm" style={{ color: THEME.textSecondary }}>
+          <li>
+            <span className="font-medium">• Name:</span> {appointment.patient || "Unknown"}
+          </li>
+
+          {appointment.whatsapp && (
+            <li>
+              <span className="font-medium">• WhatsApp:</span>{" "}
+              <a
+                href={`https://wa.me/${appointment.whatsapp.replace("+", "")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline"
+              >
+                {appointment.whatsapp}
+              </a>
+            </li>
+          )}
+
+          {appointment.notes && (
+            <li>
+              <span className="font-medium">• Notes:</span> {appointment.notes}
+            </li>
+          )}
+        </ul>
+      </div>
+
+      {/* Action Button */}
+      <button
+        onClick={handleMarkCompleted}
+        className="w-full py-2 lg:py-2.5 flex items-center justify-center gap-2 rounded-md font-semibold text-sm text-white transition hover:opacity-90"
+        style={{ background: THEME.success }}
+      >
+        <CheckCircle className="w-4 h-4" />
+        Mark as Completed
+      </button>
+    </div>
+  );
+}
+/* 🎥 ONLINE VIDEO APPOINTMENT CARD — with Day Label (Today / Tomorrow / Monday) */
+function OnlineAppointmentCard({ appointment }) {
+  const navigate = useNavigate();
+  const [timeLeft, setTimeLeft] = useState(null);
+  const [isJoinable, setIsJoinable] = useState(false);
+  const [dayLabel, setDayLabel] = useState("");
+
+  // 🗓 Helper function to get readable day
+  const getDayLabel = (dateString) => {
+    const apptDate = new Date(dateString);
+    const today = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(today.getDate() + 1);
+
+    const isToday = apptDate.toDateString() === today.toDateString();
+    const isTomorrow = apptDate.toDateString() === tomorrow.toDateString();
+
+    if (isToday) return "📅 Today";
+    if (isTomorrow) return "📅 Tomorrow";
+
+    return `📅 ${apptDate.toLocaleDateString("en-US", { weekday: "long" })}`; // Monday, Tuesday...
+  };
+
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      const apptTime = new Date(`${appointment.date}T${appointment.time}:00`);
+      const diffMs = apptTime - now;
+      const diffMin = diffMs / 1000 / 60;
+
+      // Unlock 10 min before start, up to 30 min after
+      setIsJoinable(diffMin <= 10 && diffMin >= -30);
+
+      // Live countdown
+      if (diffMin > 0) {
+        const minutes = Math.floor(diffMin);
+        const seconds = Math.floor((diffMin - minutes) * 60);
+        setTimeLeft(`${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`);
+      } else {
+        setTimeLeft(null);
+      }
+
+      // Update day label
+      setDayLabel(getDayLabel(appointment.date));
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [appointment.date, appointment.time]);
+
+  const handleJoinVideo = () => {
+    if (!isJoinable) {
+      alert("⏰ You can join only 10 minutes before the consultation time.");
+      return;
+    }
+    navigate(`/video/${appointment.id}`);
+  };
+
+  return (
+    <div
+      className="hover:shadow-md transition-all"
+      style={{
+        background: THEME.white,
+        border: `1px solid ${THEME.border}`,
+        borderLeft: `4px solid ${THEME.primary}`,
+        borderRadius: "12px",
+        padding: "16px",
+      }}
+    >
+      {/* Header Section */}
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3
+            className="font-semibold text-sm lg:text-base mb-0.5"
+            style={{ color: THEME.textPrimary }}
+          >
+            Dr. {appointment.doctor || "Doctor Name"}
+          </h3>
+          <p className="text-xs lg:text-sm" style={{ color: THEME.textSecondary }}>
+            Online Consultation
+          </p>
+        </div>
+
+        {/* Status Badge */}
+        <div className="text-right">
+          <div
+            className="px-2 py-0.5 text-xs font-medium rounded-full inline-block"
+            style={{
+              background: "#E8F0FE",
+              color: THEME.primary,
+            }}
+          >
+            Confirmed
+          </div>
+          <p
+            className="text-[11px] mt-1 font-medium"
+            style={{ color: THEME.textSecondary }}
+          >
+            {dayLabel}
+          </p>
+        </div>
+      </div>
+
+      {/* Date & Time */}
+      <div
+        className="flex items-center justify-between mb-3 text-xs lg:text-sm"
+        style={{ color: THEME.textSecondary }}
+      >
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4" style={{ color: THEME.primary }} />
+          <span>{appointment.date}</span>
+          <Clock className="w-4 h-4 ml-2" style={{ color: THEME.primary }} />
+          <span>{appointment.time}</span>
+        </div>
+
+        {/* ⏳ Countdown */}
+        {timeLeft && (
+          <span
+            className="text-[11px] lg:text-sm font-medium"
+            style={{
+              color: isJoinable ? THEME.success : THEME.warning,
+            }}
+          >
+            {isJoinable ? "🟢 You can join now" : `⏳ Starts in ${timeLeft}`}
+          </span>
+        )}
+      </div>
+
+      {/* Patient Info */}
+      <div
+        className="rounded-md border p-2 lg:p-3 mb-3"
+        style={{ borderColor: THEME.border, background: THEME.lightBg }}
+      >
+        <p
+          className="font-semibold text-xs lg:text-sm mb-1 flex items-center gap-1"
+          style={{ color: THEME.textPrimary }}
+        >
+          👤 Patient Details
+        </p>
+        <ul className="space-y-0.5 text-xs lg:text-sm" style={{ color: THEME.textSecondary }}>
+          <li>
+            <span className="font-medium">• Name:</span>{" "}
+            {appointment.patient || "Unknown"}
+          </li>
+          {appointment.notes && (
+            <li>
+              <span className="font-medium">• Notes:</span> {appointment.notes}
+            </li>
+          )}
+        </ul>
+      </div>
+
+      {/* Join Button */}
+      <button
+        onClick={handleJoinVideo}
+        disabled={!isJoinable}
+        className={`w-full py-2 lg:py-2.5 flex items-center justify-center gap-2 rounded-md font-semibold text-sm transition-all ${
+          isJoinable
+            ? "text-white hover:opacity-90"
+            : "opacity-70 cursor-not-allowed text-white"
+        }`}
+        style={{
+          background: isJoinable ? THEME.primary : THEME.secondary,
+          boxShadow: isJoinable ? "0 0 8px rgba(26,115,232,0.4)" : "none",
+        }}
+      >
+        <Video className="w-4 h-4" />
+        {isJoinable ? "Join Video Call" : "Join Locked (10 min early)"}
+      </button>
     </div>
   );
 }
