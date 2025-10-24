@@ -1309,12 +1309,23 @@ function AppointmentSection({ title, icon, appointments, type, color, typeFilter
     </div>
   );
 }
-
-/* APPOINTMENT CARD */
-/* 🏥 OFFLINE APPOINTMENT CARD — Modern Practo Style */
+/* 🏥 OFFLINE APPOINTMENT CARD — Fixed Day Logic, Original Style */
 function AppointmentCard({ appointment }) {
   const navigate = useNavigate();
   const [timeLeft, setTimeLeft] = useState(null);
+  const [dayText, setDayText] = useState("");
+
+  // 🗓 Determine correct label text: Today / Tomorrow / Weekday
+  const getDayText = (dateString) => {
+    const apptDate = new Date(dateString);
+    const today = new Date();
+    const tomorrow = new Date();
+    tomorrow.setDate(today.getDate() + 1);
+
+    if (apptDate.toDateString() === today.toDateString()) return "Today";
+    if (apptDate.toDateString() === tomorrow.toDateString()) return "Tomorrow";
+    return apptDate.toLocaleDateString("en-US", { weekday: "long" });
+  };
 
   useEffect(() => {
     const updateCountdown = () => {
@@ -1323,14 +1334,17 @@ function AppointmentCard({ appointment }) {
       const diffMs = apptTime - now;
       const diffMin = diffMs / 1000 / 60;
 
+      // Update day label
+      setDayText(getDayText(appointment.date));
+
+      // Update countdown timer
       if (diffMin > 0) {
         const hours = Math.floor(diffMin / 60);
         const minutes = Math.floor(diffMin % 60);
-        const seconds = Math.floor((diffMin * 60) % 60);
         const formatted =
           hours > 0
             ? `${hours}h ${String(minutes).padStart(2, "0")}m`
-            : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+            : `${String(minutes).padStart(2, "0")}m`;
         setTimeLeft(formatted);
       } else {
         setTimeLeft(null);
@@ -1384,6 +1398,8 @@ function AppointmentCard({ appointment }) {
             Offline Consultation
           </p>
         </div>
+
+        {/* ✅ Keep same look, but correct logic */}
         <div
           className="px-2 py-0.5 text-xs font-medium rounded-full"
           style={{
@@ -1391,7 +1407,7 @@ function AppointmentCard({ appointment }) {
             color: THEME.success,
           }}
         >
-          {timeLeft ? `🕓 In ${timeLeft}` : "Today"}
+          {timeLeft ? `🕓 In ${timeLeft}` : dayText}
         </div>
       </div>
 
@@ -1456,6 +1472,7 @@ function AppointmentCard({ appointment }) {
     </div>
   );
 }
+
 /* 🎥 ONLINE VIDEO APPOINTMENT CARD — with Day Label (Today / Tomorrow / Monday) */
 function OnlineAppointmentCard({ appointment }) {
   const navigate = useNavigate();
